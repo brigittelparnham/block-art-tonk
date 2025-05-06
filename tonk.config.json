@@ -1,0 +1,9 @@
+{
+  "name": "block-art",
+  "plan": {
+    "platform": "react",
+    "projectName": "block-art",
+    "description": "generative art project"
+  },
+  "template": "react"
+}
