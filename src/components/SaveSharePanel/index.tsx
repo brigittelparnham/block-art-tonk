@@ -73,7 +73,8 @@ export const SaveSharePanel: React.FC<SaveSharePanelProps> = ({
     setIsSaving(true);
     try {
       const dataUrl = canvasRef.toDataURL(`image/${exportFormat}`);
-      await saveArtwork(dataUrl, artworkTitle || "Untitled Artwork");
+      const finalTitle = artworkTitle.trim() || "Untitled Artwork";
+      await saveArtwork(dataUrl, finalTitle);
 
       // Show success message
       setShowSuccess(true);

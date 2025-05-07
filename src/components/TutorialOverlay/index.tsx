@@ -1,15 +1,7 @@
 /**
- * TutorialOverlay component
+ * TutorialOverlay component (UPDATED)
  *
- * Provides an interactive tutorial system that overlays the main interface
- * to guide users through various features and workflows.
- *
- * @example
- * <TutorialOverlay
- *   currentStep={currentStep}
- *   onNext={handleNext}
- *   onComplete={handleComplete}
- * />
+ * Fixed implementation for the tutorial system.
  */
 
 import React, { useEffect, useRef } from "react";
@@ -31,12 +23,6 @@ export interface TutorialOverlayProps {
 
 /**
  * TutorialOverlay provides an interactive tutorial experience
- *
- * Features:
- * - Step-by-step guidance
- * - Element highlighting
- * - Skip/back navigation
- * - Progress tracking
  */
 export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
   currentStep,
@@ -62,21 +48,27 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
 
   // Highlight target element
   useEffect(() => {
-    if (!step.targetElement) return;
+    if (!step?.targetElement) return;
 
     // Find and highlight the target element
     const targetEl = document.querySelector(step.targetElement);
     if (targetEl) {
-      // Add highlight
-      targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Scroll element into view with smooth behavior
+      setTimeout(() => {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+
+      // Add highlight class
       targetEl.classList.add("tutorial-highlight");
+      targetEl.setAttribute("data-tutorial-active", "true");
 
       // Remove highlight on cleanup
       return () => {
         targetEl.classList.remove("tutorial-highlight");
+        targetEl.removeAttribute("data-tutorial-active");
       };
     }
-  }, [step.targetElement]);
+  }, [step?.targetElement, currentStep]);
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -273,7 +265,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
             </h3>
             <p className="text-gray-600 mb-6">
               Are you sure you want to exit the tutorial? You can restart it
-              later from the help menu.
+              later from the tutorials menu.
             </p>
 
             <div className="flex justify-end gap-2">

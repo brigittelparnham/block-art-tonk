@@ -1,14 +1,19 @@
 /**
- * GenerativeArt view component
+ * GenerativeArt view component (UPDATED)
  *
  * Main view for the generative art application that orchestrates
  * all components and manages the state of art generation.
+ *
+ * Updates:
+ * - Fixed tutorial initialization
+ * - Added custom algorithm creation integration
+ * - Improved gallery view to prevent duplications
  *
  * @example
  * <GenerativeArt />
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useArtworkStore } from "../../stores/artworkStore";
 import { useTutorialStore } from "../../stores/tutorialStore";
 import { ArtCanvas } from "../../components/ArtCanvas";
@@ -19,6 +24,10 @@ import { TutorialOverlay } from "../../components/TutorialOverlay";
 import { ArtworkGallery } from "../../components/ArtworkGallery";
 import { Button } from "../../components/Button";
 import { Heading } from "../../components/Heading";
+import { Modal } from "../../components/Modal";
+import { Card } from "../../components/Card";
+import CustomAlgorithmEditor from "../../components/CustomAlgorithmEditor";
+import { PlusCircle, Book, Code } from "lucide-react";
 
 export interface GenerativeArtProps {
   /** Whether to show the tutorial on first visit */
@@ -27,12 +36,6 @@ export interface GenerativeArtProps {
 
 /**
  * GenerativeArt component that manages the main generative art interface
- *
- * Architecture:
- * - Uses artworkStore for synchronized artwork data
- * - Uses tutorialStore for tutorial progress
- * - Manages real-time canvas rendering
- * - Coordinates between all sub-components
  */
 export const GenerativeArt: React.FC<GenerativeArtProps> = ({
   showTutorial = true,
@@ -45,23 +48,58 @@ export const GenerativeArt: React.FC<GenerativeArtProps> = ({
     parameters,
     updateParameters,
     saveArtwork,
+    saveCustomAlgorithm,
   } = useArtworkStore();
 
-  const { isInTutorial, currentStep, completeTutorial, nextStep } =
-    useTutorialStore();
+  const {
+    isInTutorial,
+    currentTutorial,
+    currentStep,
+    startTutorial,
+    completeTutorial,
+    nextStep,
+    availableTutorials,
+    completedTutorials,
+  } = useTutorialStore();
 
   // Local UI state
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  const [showTutorialSelector, setShowTutorialSelector] = useState(false);
+  const [showCustomEditor, setShowCustomEditor] = useState(false);
   const [canvasRef, setCanvasRef] = useState<HTMLCanvasElement | null>(null);
+  const didInitTutorial = useRef(false);
 
-  // Handle tutorial on first visit
+  // Handle tutorial on first visit - fixed implementation
   useEffect(() => {
-    if (showTutorial && !isInTutorial && savedArtworks.length === 0) {
-      // Start tutorial automatically for new users
-      completeTutorial(); // This will trigger the tutorial overlay
+    // Only run once
+    if (didInitTutorial.current) return;
+
+    if (
+      showTutorial &&
+      !isInTutorial &&
+      savedArtworks.length === 0 &&
+      availableTutorials.length > 0
+    ) {
+      // Start the first tutorial for new users
+      const firstTutorial = availableTutorials.find(
+        (t) => t.id === "first-artwork"
+      );
+      if (firstTutorial && !completedTutorials.includes(firstTutorial.id)) {
+        startTutorial(firstTutorial.id);
+        didInitTutorial.current = true;
+      }
+    } else {
+      didInitTutorial.current = true;
     }
-  }, [showTutorial, isInTutorial, savedArtworks.length]);
+  }, [
+    showTutorial,
+    isInTutorial,
+    savedArtworks.length,
+    availableTutorials,
+    completedTutorials,
+    startTutorial,
+  ]);
 
   // Handle parameter changes
   const handleParameterChange = (paramId: string, value: any) => {
@@ -80,6 +118,7 @@ export const GenerativeArt: React.FC<GenerativeArtProps> = ({
     try {
       // Call the algorithm's draw function
       selectedAlgorithm.draw(canvasRef, parameters);
+      setIsGenerating(false);
     } catch (error) {
       console.error("Error generating artwork:", error);
     } finally {
@@ -93,11 +132,18 @@ export const GenerativeArt: React.FC<GenerativeArtProps> = ({
 
     try {
       // Convert canvas to data URL for saving
+      const title = parameters.title || "Untitled Artwork";
       const dataURL = canvasRef.toDataURL();
-      await saveArtwork(dataURL);
+      await saveArtwork(dataURL, title);
     } catch (error) {
       console.error("Error saving artwork:", error);
     }
+  };
+
+  // Handle custom algorithm save
+  const handleSaveCustomAlgorithm = (algorithm) => {
+    saveCustomAlgorithm(algorithm);
+    setShowCustomEditor(false);
   };
 
   return (
@@ -112,6 +158,25 @@ export const GenerativeArt: React.FC<GenerativeArtProps> = ({
           <div className="flex items-center gap-4">
             <Button
               variant="secondary"
+              onClick={() => setShowCustomEditor(true)}
+              className="flex items-center gap-2"
+              data-tutorial="custom-algorithm-button"
+            >
+              <Code className="w-4 h-4" />
+              Create Algorithm
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={() => setShowTutorialSelector(true)}
+              className="flex items-center gap-2"
+            >
+              <Book className="w-4 h-4" />
+              Tutorials
+            </Button>
+
+            <Button
+              variant="secondary"
               onClick={() => setShowGallery(!showGallery)}
               aria-label="Toggle gallery view"
             >
@@ -123,6 +188,7 @@ export const GenerativeArt: React.FC<GenerativeArtProps> = ({
               onClick={handleGenerate}
               disabled={isGenerating || !selectedAlgorithm}
               aria-label="Generate new artwork"
+              data-tutorial="generate-button"
             >
               {isGenerating ? "Generating..." : "Generate"}
             </Button>
@@ -141,6 +207,10 @@ export const GenerativeArt: React.FC<GenerativeArtProps> = ({
                 // Load artwork parameters
                 updateParameters(artwork.parameters);
                 setShowGallery(false);
+              }}
+              onDeleteArtwork={(artworkId) => {
+                // No need to update UI state, store handles it
+                console.log("Deleted artwork:", artworkId);
               }}
             />
           </section>
@@ -209,8 +279,68 @@ export const GenerativeArt: React.FC<GenerativeArtProps> = ({
         )}
       </div>
 
+      {/* Custom Algorithm Editor Modal */}
+      {showCustomEditor && (
+        <Modal
+          isOpen={showCustomEditor}
+          onClose={() => setShowCustomEditor(false)}
+          title="Create Custom Algorithm"
+          maxWidth="full"
+        >
+          <div className="h-[80vh]">
+            <CustomAlgorithmEditor onSave={handleSaveCustomAlgorithm} />
+          </div>
+        </Modal>
+      )}
+
+      {/* Tutorial Selector Modal */}
+      {showTutorialSelector && (
+        <Modal
+          isOpen={showTutorialSelector}
+          onClose={() => setShowTutorialSelector(false)}
+          title="Available Tutorials"
+          maxWidth="md"
+        >
+          <div className="space-y-4 py-2">
+            {availableTutorials.map((tutorial) => (
+              <Card key={tutorial.id} className="p-4 hover:bg-gray-50">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-semibold text-lg">{tutorial.name}</h3>
+                    <p className="text-gray-600 mt-1">{tutorial.description}</p>
+
+                    {completedTutorials.includes(tutorial.id) && (
+                      <span className="inline-block mt-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                        Completed
+                      </span>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      startTutorial(tutorial.id);
+                      setShowTutorialSelector(false);
+                    }}
+                  >
+                    {completedTutorials.includes(tutorial.id)
+                      ? "Repeat Tutorial"
+                      : "Start Tutorial"}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+
+            {availableTutorials.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <p>No tutorials available.</p>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
       {/* Tutorial Overlay */}
-      {isInTutorial && (
+      {isInTutorial && currentTutorial && (
         <TutorialOverlay
           currentStep={currentStep}
           onNext={nextStep}

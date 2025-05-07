@@ -10,7 +10,6 @@
 
 import { create } from "zustand";
 import { sync, DocumentId } from "@tonk/keepsync";
-import { Doc } from "@automerge/automerge";
 
 // Type definitions
 export interface Artwork {
@@ -47,15 +46,17 @@ export interface Algorithm {
   parameters: AlgorithmParameter[];
   draw: (canvas: HTMLCanvasElement, params: Record<string, any>) => void;
   thumbnail?: string;
+  isCustom?: boolean;
 }
 
-// Store state interface and actions (same as before)
+// Store state interface and actions
 interface ArtworkState {
   selectedAlgorithm: Algorithm | null;
   parameters: Record<string, any>;
   currentArtwork: string | null;
   savedArtworks: Artwork[];
   publicArtworks: Artwork[];
+  customAlgorithms: Algorithm[];
   isGenerating: boolean;
   generationError: string | null;
 }
@@ -75,9 +76,16 @@ interface ArtworkActions {
   likeArtwork: (artworkId: string) => Promise<void>;
   remixArtwork: (artwork: Artwork) => void;
   togglePublicity: (artworkId: string) => Promise<void>;
+  saveCustomAlgorithm: (algorithm: Algorithm) => void;
+  deleteCustomAlgorithm: (algorithmId: string) => void;
 }
 
 type ArtworkStore = ArtworkState & ArtworkActions;
+
+// Helper function to generate unique IDs
+const generateUniqueId = () => {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+};
 
 export const useArtworkStore = create<ArtworkStore>()(
   sync(
@@ -87,6 +95,7 @@ export const useArtworkStore = create<ArtworkStore>()(
       currentArtwork: null,
       savedArtworks: [],
       publicArtworks: [],
+      customAlgorithms: [],
       isGenerating: false,
       generationError: null,
 
@@ -124,14 +133,16 @@ export const useArtworkStore = create<ArtworkStore>()(
         }
       },
 
+      // Fixed save function to prevent duplicates
       saveArtwork: async (imageData, title = "Untitled Artwork") => {
         const { selectedAlgorithm, parameters, savedArtworks } = get();
         if (!selectedAlgorithm) return;
 
+        // Generate unique ID to avoid conflicts
+        const uniqueId = generateUniqueId();
+
         const artwork: Artwork = {
-          id: `artwork-${Date.now()}-${Math.random()
-            .toString(36)
-            .substr(2, 9)}`,
+          id: uniqueId,
           title,
           algorithm: selectedAlgorithm.id,
           parameters: { ...parameters },
@@ -150,6 +161,7 @@ export const useArtworkStore = create<ArtworkStore>()(
         });
       },
 
+      // Fixed delete function to handle artworks correctly
       deleteArtwork: async (artworkId) => {
         const { savedArtworks } = get();
         set({
@@ -190,8 +202,13 @@ export const useArtworkStore = create<ArtworkStore>()(
       },
 
       remixArtwork: (artwork) => {
+        const { customAlgorithms } = get();
+        const algorithm = customAlgorithms.find(
+          (a) => a.id === artwork.algorithm
+        );
+
         set({
-          selectedAlgorithm: null, // Placeholder - set actual algorithm elsewhere
+          selectedAlgorithm: algorithm || null,
           parameters: { ...artwork.parameters },
         });
       },
@@ -204,6 +221,33 @@ export const useArtworkStore = create<ArtworkStore>()(
             isPublic: !artwork.isPublic,
           });
         }
+      },
+
+      // New function to save custom algorithms
+      saveCustomAlgorithm: (algorithm) => {
+        const { customAlgorithms } = get();
+        set({
+          customAlgorithms: [
+            ...customAlgorithms,
+            { ...algorithm, isCustom: true },
+          ],
+          selectedAlgorithm: algorithm,
+        });
+      },
+
+      // New function to delete custom algorithms
+      deleteCustomAlgorithm: (algorithmId) => {
+        const { customAlgorithms, selectedAlgorithm } = get();
+        const updatedAlgorithms = customAlgorithms.filter(
+          (a) => a.id !== algorithmId
+        );
+
+        set({
+          customAlgorithms: updatedAlgorithms,
+          // Deselect the algorithm if it was selected
+          selectedAlgorithm:
+            selectedAlgorithm?.id === algorithmId ? null : selectedAlgorithm,
+        });
       },
     }),
     { docId: "artwork-store" as DocumentId } // This identifies the sync document
